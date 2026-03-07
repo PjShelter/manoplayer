@@ -47,6 +47,9 @@ input {
   border-radius: 28px;
   padding: 24px;
   overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 12px;
 }
 
 .stage-panel {
@@ -161,8 +164,8 @@ h3 {
 }
 
 .section-header {
-  margin-top: 22px;
-  margin-bottom: 12px;
+  margin-top: 8px;
+  margin-bottom: 0;
 }
 
 .section-hint,
@@ -171,10 +174,29 @@ h3 {
   font-size: 13px;
 }
 
+.inline-actions,
+.pager-row,
+.copy-mode-row,
+.output-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-actions {
+  margin-left: auto;
+}
+
+.pager-row {
+  justify-content: space-between;
+}
+
 .chip-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  min-height: 144px;
+  align-content: start;
 }
 
 .chip {
@@ -193,14 +215,36 @@ h3 {
   display: grid;
   gap: 14px;
   padding-bottom: 8px;
+  max-height: 260px;
+  overflow: auto;
 }
 
 .layer-group {
-  display: grid;
-  gap: 8px;
   padding: 14px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.48);
+}
+
+.layer-group[open] {
+  box-shadow: inset 0 0 0 1px rgba(138, 77, 22, 0.08);
+}
+
+.layer-group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  list-style: none;
+}
+
+.layer-group-title::-webkit-details-marker {
+  display: none;
+}
+
+.layer-group-body {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .layer-toggle {
@@ -216,6 +260,35 @@ h3 {
   border-radius: 16px;
   color: #7a1818;
   background: rgba(216, 77, 77, 0.12);
+}
+
+.output-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.copy-mode-row {
+  flex-wrap: wrap;
+}
+
+.compact-button {
+  margin-left: auto;
+  padding: 10px 14px;
+}
+
+.output-textarea {
+  min-height: 96px;
+  max-height: 148px;
+  resize: vertical;
+  width: 100%;
+  border: 1px solid rgba(138, 77, 22, 0.12);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 252, 246, 0.88);
+  color: #4d3822;
 }
 
 .stage-frame {
