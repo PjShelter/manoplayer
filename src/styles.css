@@ -1,0 +1,261 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  background:
+    radial-gradient(circle at top, rgba(255, 231, 179, 0.9), transparent 38%),
+    linear-gradient(135deg, #f7f1e6 0%, #efe1ca 48%, #d8c2a4 100%);
+  color: #2f2418;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  min-height: 100vh;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(340px, 420px) minmax(520px, 1fr);
+  gap: 24px;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.control-panel,
+.stage-panel {
+  border: 1px solid rgba(84, 58, 30, 0.18);
+  background: rgba(255, 250, 240, 0.72);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 20px 60px rgba(92, 65, 32, 0.12);
+}
+
+.control-panel {
+  border-radius: 28px;
+  padding: 24px;
+  overflow: auto;
+}
+
+.stage-panel {
+  border-radius: 36px;
+  padding: 24px;
+}
+
+.panel-header,
+.section-header,
+.meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8a5d2b;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 30px;
+}
+
+h2 {
+  font-size: 18px;
+}
+
+h3 {
+  font-size: 14px;
+  color: #7b5630;
+}
+
+.panel-copy {
+  margin-top: 18px;
+  line-height: 1.6;
+  color: #5b4630;
+}
+
+.primary-button,
+.ghost-button,
+.chip {
+  border: 0;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.primary-button {
+  padding: 12px 18px;
+  border-radius: 999px;
+  color: #fff7ec;
+  background: linear-gradient(135deg, #8a4d16, #c2772d);
+  box-shadow: 0 12px 24px rgba(138, 77, 22, 0.24);
+}
+
+.ghost-button {
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(138, 77, 22, 0.08);
+  color: #7a4f29;
+}
+
+.primary-button:hover,
+.ghost-button:hover,
+.chip:hover {
+  transform: translateY(-1px);
+}
+
+.primary-button:disabled,
+.ghost-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+  transform: none;
+}
+
+.meta-card {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.54);
+}
+
+.meta-row {
+  align-items: flex-start;
+}
+
+.meta-row span {
+  color: #866544;
+}
+
+.meta-row strong {
+  max-width: 70%;
+  text-align: right;
+  word-break: break-all;
+}
+
+.path-row strong {
+  font-size: 12px;
+}
+
+.section-header {
+  margin-top: 22px;
+  margin-bottom: 12px;
+}
+
+.section-hint,
+.empty-state {
+  color: #876446;
+  font-size: 13px;
+}
+
+.chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.chip {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(138, 77, 22, 0.08);
+  color: #6a4623;
+}
+
+.chip.active {
+  background: #6a3f16;
+  color: #fff4e7;
+}
+
+.layer-groups {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 8px;
+}
+
+.layer-group {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.layer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #49351f;
+}
+
+.error-box {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  color: #7a1818;
+  background: rgba(216, 77, 77, 0.12);
+}
+
+.stage-frame {
+  position: relative;
+  min-height: calc(100vh - 96px);
+  border-radius: 28px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(62, 78, 103, 0.12), rgba(70, 50, 28, 0.12)),
+    linear-gradient(180deg, #fffdf8 0%, #f2e4cf 46%, #d8b992 100%);
+}
+
+.stage-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.35) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.35) 1px, transparent 1px);
+  background-size: 42px 42px;
+  pointer-events: none;
+}
+
+.player-canvas {
+  position: absolute;
+  inset: 0;
+  cursor: grab;
+  touch-action: none;
+}
+
+.player-canvas:active {
+  cursor: grabbing;
+}
+
+@media (max-width: 960px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .stage-frame {
+    min-height: 60vh;
+  }
+}
