@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::UNIX_EPOCH;
 
@@ -23,6 +24,13 @@ struct LoadedCharacterModel {
     server_url: String,
     revision: u64,
     model: Value,
+}
+
+fn repo_root() -> Result<PathBuf, String> {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| "无法定位仓库根目录".to_string())
 }
 
 fn normalize_asset_path(base_dir: &Path, raw_path: &str) -> PathBuf {
@@ -101,10 +109,7 @@ fn start_or_update_file_server(base_path: &Path) -> Result<String, String> {
         state.port = Some(port);
     }
 
-    Ok(format!(
-        "http://127.0.0.1:{}",
-        state.port.expect("port initialized")
-    ))
+    Ok(format!("http://127.0.0.1:{}", state.port.expect("port initialized")))
 }
 
 fn load_character_model_inner(model_path: &str) -> Result<LoadedCharacterModel, String> {
@@ -166,6 +171,75 @@ fn get_character_revision(model_path: String) -> Result<u64, String> {
     Ok(loaded.revision)
 }
 
+#[tauri::command]
+fn save_character_model(model_path: String, model_json: Value) -> Result<String, String> {
+    let path = PathBuf::from(&model_path);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| format!("创建目录失败: {error}"))?;
+    }
+
+    let content = serde_json::to_string_pretty(&model_json)
+        .map_err(|error| format!("序列化 JSON 失败: {error}"))?;
+    fs::write(&path, format!("{content}\n")).map_err(|error| format!("写入文件失败: {error}"))?;
+    Ok(path.to_string_lossy().replace('\\', "/"))
+}
+
+#[tauri::command]
+fn generate_mano_from_psd(psd_path: String, output_dir: Option<String>) -> Result<String, String> {
+    let repo_root = repo_root()?;
+    let tool_dir = repo_root.join("utils").join("psd2mano");
+    let script_path = tool_dir.join("scripts").join("export-psd.ts");
+    let node_modules_dir = tool_dir.join("node_modules");
+    let psd_file = PathBuf::from(&psd_path);
+
+    if !script_path.exists() {
+        return Err(format!("psd2mano 脚本不存在: {}", script_path.to_string_lossy()));
+    }
+
+    if !node_modules_dir.exists() {
+        return Err("psd2mano 依赖未安装，请先在 utils/psd2mano 执行 npm install".to_string());
+    }
+
+    if !psd_file.exists() {
+        return Err(format!("PSD 文件不存在: {psd_path}"));
+    }
+
+    let resolved_output_dir = if let Some(dir) = output_dir {
+        PathBuf::from(dir)
+    } else {
+        let stem = psd_file.file_stem().and_then(|name| name.to_str()).unwrap_or("mano");
+        psd_file.with_extension("").with_file_name(format!("{stem}-export"))
+    };
+
+    let output = Command::new("node")
+        .current_dir(&tool_dir)
+        .arg("--experimental-strip-types")
+        .arg("scripts/export-psd.ts")
+        .arg(&psd_path)
+        .arg(&resolved_output_dir)
+        .arg("--format")
+        .arg("png")
+        .output()
+        .map_err(|error| format!("启动 psd2mano 失败: {error}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return Err(format!(
+            "psd2mano 执行失败。\nstdout:\n{}\nstderr:\n{}",
+            stdout.trim(),
+            stderr.trim()
+        ));
+    }
+
+    let model_path = resolved_output_dir.join("model.char.json");
+    if !model_path.exists() {
+        return Err(format!("已执行 psd2mano，但未找到输出模型: {}", model_path.to_string_lossy()));
+    }
+
+    Ok(model_path.to_string_lossy().replace('\\', "/"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -173,7 +247,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             load_character_model,
-            get_character_revision
+            get_character_revision,
+            save_character_model,
+            generate_mano_from_psd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

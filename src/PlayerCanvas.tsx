@@ -29,23 +29,31 @@ export function PlayerCanvas({
   });
 
   function fitPlayerToViewport(player: CharacterPlayer, app: PIXI.Application) {
-    const bounds = player.getLocalBounds();
-    if (bounds.width <= 1 || bounds.height <= 1) {
+    try {
+      if (!player || (player as unknown as { destroyed?: boolean }).destroyed) {
+        return false;
+      }
+
+      const bounds = player.getLocalBounds();
+      if (!Number.isFinite(bounds.width) || !Number.isFinite(bounds.height) || bounds.width <= 1 || bounds.height <= 1) {
+        return false;
+      }
+
+      const viewWidth = app.renderer.width || 1;
+      const viewHeight = app.renderer.height || 1;
+      const fitScale = Math.min(
+        (viewWidth * 0.72) / bounds.width,
+        (viewHeight * 0.78) / bounds.height,
+        1
+      );
+
+      player.pivot.set(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+      player.position.set(viewWidth / 2, viewHeight / 2);
+      player.scale.set(fitScale);
+      return true;
+    } catch {
       return false;
     }
-
-    const viewWidth = app.renderer.width || 1;
-    const viewHeight = app.renderer.height || 1;
-    const fitScale = Math.min(
-      (viewWidth * 0.72) / bounds.width,
-      (viewHeight * 0.78) / bounds.height,
-      1
-    );
-
-    player.pivot.set(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-    player.position.set(viewWidth / 2, viewHeight / 2);
-    player.scale.set(fitScale);
-    return true;
   }
 
   useEffect(() => {
@@ -182,8 +190,11 @@ export function PlayerCanvas({
     let attempts = 0;
     const ticker = () => {
       attempts += 1;
-      const fitted = fitPlayerToViewport(player, app);
-      if (fitted || attempts > 180) {
+      if (!playerRef.current || playerRef.current !== player || attempts > 180) {
+        app.ticker.remove(ticker);
+        return;
+      }
+      if (fitPlayerToViewport(player, app)) {
         app.ticker.remove(ticker);
       }
     };
