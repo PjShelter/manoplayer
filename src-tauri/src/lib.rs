@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -24,6 +25,12 @@ struct LoadedCharacterModel {
     server_url: String,
     revision: u64,
     model: Value,
+}
+
+#[derive(Clone, Debug)]
+struct LayerCommandInfo {
+    group: String,
+    name: String,
 }
 
 fn repo_root() -> Result<PathBuf, String> {
@@ -109,13 +116,182 @@ fn start_or_update_file_server(base_path: &Path) -> Result<String, String> {
         state.port = Some(port);
     }
 
-    Ok(format!("http://127.0.0.1:{}", state.port.expect("port initialized")))
+    Ok(format!(
+        "http://127.0.0.1:{}",
+        state.port.expect("port initialized")
+    ))
+}
+
+fn has_command_syntax(value: &str) -> bool {
+    value.contains('>') || value.contains('+') || value.contains('-')
+}
+
+fn normalize_layers(model_json: &mut Value) -> Result<HashMap<String, LayerCommandInfo>, String> {
+    let layers = model_json
+        .pointer_mut("/assets/layers")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| "模型缺少 assets.layers".to_string())?;
+
+    let mut layer_map = HashMap::new();
+
+    for layer in layers.iter_mut() {
+        let Some(layer_object) = layer.as_object_mut() else {
+            continue;
+        };
+
+        let original_id = layer_object
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let original_group = layer_object
+            .get("group")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let layer_name = layer_object
+            .get("name")
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .or_else(|| original_id.rsplit('/').next().map(ToOwned::to_owned))
+            .unwrap_or_else(|| "layer".to_string());
+
+        let normalized_group = if original_group.is_empty() {
+            layer_name.clone()
+        } else {
+            original_group.clone()
+        };
+        let normalized_name = layer_name.clone();
+        let normalized_id = format!("{}/{}", normalized_group, normalized_name);
+
+        if original_group.is_empty() {
+            layer_object.insert("group".to_string(), Value::String(normalized_group.clone()));
+            layer_object.insert("id".to_string(), Value::String(normalized_id.clone()));
+            layer_object.insert("name".to_string(), Value::String(normalized_name.clone()));
+        }
+
+        let info = LayerCommandInfo {
+            group: normalized_group,
+            name: normalized_name,
+        };
+
+        layer_map.insert(original_id, info.clone());
+        layer_map.insert(normalized_id, info);
+    }
+
+    Ok(layer_map)
+}
+
+fn flush_pending_layer_commands(
+    output: &mut Vec<String>,
+    pending_groups: &mut BTreeMap<String, Vec<String>>,
+    group_order: &mut Vec<String>,
+) {
+    for group in group_order.drain(..) {
+        if let Some(names) = pending_groups.remove(&group) {
+            output.push(format!("{group}-"));
+            for name in names {
+                output.push(format!("{group}+{name}"));
+            }
+        }
+    }
+}
+
+fn normalize_command_list(
+    commands: &[String],
+    pose_names: &HashSet<String>,
+    layer_map: &HashMap<String, LayerCommandInfo>,
+) -> Vec<String> {
+    let mut output = Vec::new();
+    let mut pending_groups: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut group_order = Vec::new();
+
+    for command in commands {
+        if pose_names.contains(command) {
+            flush_pending_layer_commands(&mut output, &mut pending_groups, &mut group_order);
+            output.push(command.clone());
+            continue;
+        }
+
+        if let Some(layer) = layer_map.get(command) {
+            let names = pending_groups
+                .entry(layer.group.clone())
+                .or_insert_with(|| {
+                    group_order.push(layer.group.clone());
+                    Vec::new()
+                });
+            if !names.iter().any(|name| name == &layer.name) {
+                names.push(layer.name.clone());
+            }
+            continue;
+        }
+
+        if has_command_syntax(command) {
+            flush_pending_layer_commands(&mut output, &mut pending_groups, &mut group_order);
+            output.push(command.clone());
+            continue;
+        }
+
+        flush_pending_layer_commands(&mut output, &mut pending_groups, &mut group_order);
+        output.push(command.clone());
+    }
+
+    flush_pending_layer_commands(&mut output, &mut pending_groups, &mut group_order);
+    output
+}
+
+fn normalize_controller(model_json: &mut Value, layer_map: &HashMap<String, LayerCommandInfo>) {
+    let Some(controller) = model_json
+        .get_mut("controller")
+        .and_then(Value::as_object_mut)
+    else {
+        return;
+    };
+
+    let pose_names: HashSet<String> = controller
+        .get("poses")
+        .and_then(Value::as_object)
+        .map(|poses| poses.keys().cloned().collect())
+        .unwrap_or_default();
+
+    if let Some(base_layers) = controller
+        .get_mut("baseLayers")
+        .and_then(Value::as_array_mut)
+    {
+        let commands = base_layers
+            .iter()
+            .filter_map(Value::as_str)
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        *base_layers = normalize_command_list(&commands, &pose_names, layer_map)
+            .into_iter()
+            .map(Value::String)
+            .collect();
+    }
+
+    if let Some(poses) = controller.get_mut("poses").and_then(Value::as_object_mut) {
+        for pose_value in poses.values_mut() {
+            let Some(commands) = pose_value.as_array_mut() else {
+                continue;
+            };
+            let raw_commands = commands
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>();
+            *commands = normalize_command_list(&raw_commands, &pose_names, layer_map)
+                .into_iter()
+                .map(Value::String)
+                .collect();
+        }
+    }
 }
 
 fn load_character_model_inner(model_path: &str) -> Result<LoadedCharacterModel, String> {
     let model_file = PathBuf::from(model_path);
-    let model_text = fs::read_to_string(&model_file)
-        .map_err(|error| format!("读取模型文件失败: {error}"))?;
+    let model_text =
+        fs::read_to_string(&model_file).map_err(|error| format!("读取模型文件失败: {error}"))?;
 
     let mut model_json: Value =
         serde_json::from_str(&model_text).map_err(|error| format!("解析 JSON 失败: {error}"))?;
@@ -135,6 +311,8 @@ fn load_character_model_inner(model_path: &str) -> Result<LoadedCharacterModel, 
     };
     let server_url = start_or_update_file_server(&resolved_base_dir)?;
     let revision = latest_modified_recursive(&resolved_base_dir)?;
+    let layer_map = normalize_layers(&mut model_json)?;
+    normalize_controller(&mut model_json, &layer_map);
 
     let layers = model_json
         .pointer_mut("/assets/layers")
@@ -193,7 +371,10 @@ fn generate_mano_from_psd(psd_path: String, output_dir: Option<String>) -> Resul
     let psd_file = PathBuf::from(&psd_path);
 
     if !script_path.exists() {
-        return Err(format!("psd2mano 脚本不存在: {}", script_path.to_string_lossy()));
+        return Err(format!(
+            "psd2mano 脚本不存在: {}",
+            script_path.to_string_lossy()
+        ));
     }
 
     if !node_modules_dir.exists() {
@@ -207,8 +388,13 @@ fn generate_mano_from_psd(psd_path: String, output_dir: Option<String>) -> Resul
     let resolved_output_dir = if let Some(dir) = output_dir {
         PathBuf::from(dir)
     } else {
-        let stem = psd_file.file_stem().and_then(|name| name.to_str()).unwrap_or("mano");
-        psd_file.with_extension("").with_file_name(format!("{stem}-export"))
+        let stem = psd_file
+            .file_stem()
+            .and_then(|name| name.to_str())
+            .unwrap_or("mano");
+        psd_file
+            .with_extension("")
+            .with_file_name(format!("{stem}-export"))
     };
 
     let output = Command::new("node")
@@ -234,7 +420,10 @@ fn generate_mano_from_psd(psd_path: String, output_dir: Option<String>) -> Resul
 
     let model_path = resolved_output_dir.join("model.char.json");
     if !model_path.exists() {
-        return Err(format!("已执行 psd2mano，但未找到输出模型: {}", model_path.to_string_lossy()));
+        return Err(format!(
+            "已执行 psd2mano，但未找到输出模型: {}",
+            model_path.to_string_lossy()
+        ));
     }
 
     Ok(model_path.to_string_lossy().replace('\\', "/"))

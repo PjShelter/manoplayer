@@ -30,7 +30,7 @@ fn handle_request(url: &str, base_path: &str) -> Response<std::io::Cursor<Vec<u8
     let file_path = Path::new(base_path).join(path_part);
 
     if !file_path.exists() || !file_path.is_file() {
-      return add_cors_headers(Response::from_string("File not found").with_status_code(404));
+        return add_cors_headers(Response::from_string("File not found").with_status_code(404));
     }
 
     match fs::read(&file_path) {

@@ -228,6 +228,59 @@ export function ManoModelEditor({
     });
   }
 
+  function removeCommand(command: string, target: 'base' | 'pose') {
+    if (!controller) {
+      return;
+    }
+
+    if (target === 'base') {
+      removeBaseLayer(command);
+      return;
+    }
+
+    if (!selectedPose) {
+      return;
+    }
+
+    removeSelectedPoseCommand(command);
+  }
+
+  function hasCommand(command: string, target: 'base' | 'pose') {
+    if (!controller) {
+      return false;
+    }
+
+    if (target === 'base') {
+      return controller.baseLayers.includes(command);
+    }
+
+    if (!selectedPose) {
+      return false;
+    }
+
+    return (controller.poses[selectedPose] ?? []).includes(command);
+  }
+
+  function ensureCommand(command: string, target: 'base' | 'pose') {
+    if (hasCommand(command, target)) {
+      return;
+    }
+    insertCommand(command, target);
+  }
+
+  function previewCommand(command: string, target: 'base' | 'pose') {
+    ensureCommand(command, target);
+    window.setTimeout(() => {
+      if (target === 'base') {
+        onPreviewDefault();
+        return;
+      }
+      if (selectedPose) {
+        onPreviewPose(selectedPose);
+      }
+    }, 0);
+  }
+
   async function copyJsonPreview() {
     await navigator.clipboard.writeText(exportPreview);
     setCopyStatus('JSON 已复制');
@@ -369,12 +422,29 @@ export function ManoModelEditor({
                       {entry.commands.map((command) => (
                         <div key={command} className="command-row">
                           <code>{command}</code>
-                          <div className="inline-actions">
-                            <button className="ghost-button icon-button" onClick={() => insertCommand(command, 'base')}>
-                              加到 Base
+                          <div className="inline-actions wrap-actions">
+                            <button className="ghost-button icon-button" onClick={() => previewCommand(command, 'base')}>
+                              预览 Base
                             </button>
-                            <button className="ghost-button icon-button" onClick={() => insertCommand(command, 'pose')}>
-                              加到 Pose
+                            <button
+                              className="ghost-button icon-button"
+                              onClick={() => (hasCommand(command, 'base') ? removeCommand(command, 'base') : insertCommand(command, 'base'))}
+                            >
+                              {hasCommand(command, 'base') ? '移出 Base' : '加到 Base'}
+                            </button>
+                            <button
+                              className="ghost-button icon-button"
+                              onClick={() => previewCommand(command, 'pose')}
+                              disabled={!selectedPose}
+                            >
+                              预览 Pose
+                            </button>
+                            <button
+                              className="ghost-button icon-button"
+                              onClick={() => (hasCommand(command, 'pose') ? removeCommand(command, 'pose') : insertCommand(command, 'pose'))}
+                              disabled={!selectedPose}
+                            >
+                              {hasCommand(command, 'pose') ? '移出 Pose' : '加到 Pose'}
                             </button>
                           </div>
                         </div>
